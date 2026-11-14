@@ -1,200 +1,196 @@
-import math
-import random
-import matplotlib.pyplot as plt
+# =====================================================================
+# Տների գների կանխատեսում գծային ռեգրեսիայի (Linear Regression) ալգորիթմով
+# Dataset՝ California Housing
+# =====================================================================
+
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.datasets 
-import fetch_california_housing
 
-# ==========================================
-# 1. ՏՎՅԱԼՆԵՐԻ ՀԱՎԱՔԱԾՈՒ ԵՎ ՆԱԽԱՊԱՏՐԱՍՏՈՒՄ
-# ==========================================
+from sklearn.datasets import fetch_california_housing
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression  # օգտագործվում է միայն ստուգման համար
 
-# Բեռնում ենք California Housing dataset-ը անմիջապես sklearn-ից
-california = fetch_california_housing(as_frame=True)
-df = california.frame
+# ---------------------------------------------------------------------
+# 1. ՏՎՅԱԼՆԵՐԻ ՀԱՎԱՔԱԾՈՒ
+# ---------------------------------------------------------------------
+housing = fetch_california_housing(as_frame=True)
+df = housing.frame
 
-# Առանձնացնում ենք X (նկարագրող հատկանիշներ) և y (նպատակային փոփոխական՝ MedHouseVal)
-y = df['MedHouseVal'].tolist()
-feature_names = [c for c in df.columns if c != 'MedHouseVal']
-X = df[feature_names].values.tolist()
+print("Տվյալների չափը (տողեր, սյունակներ):", df.shape)
+print(df.head(10))
 
-# Տվյալների բաժանում Train (80%) և Test (20%)
-indices = list(range(len(X)))
-random.seed(42)
-random.shuffle(indices)
+# Սյունակների նկարագրություն
+# MedInc     - շրջանի բնակիչների միջին եկամուտ
+# HouseAge   - տան միջին տարիք
+# AveRooms   - սենյակների միջին քանակ
+# AveBedrms  - ննջասենյակների միջին քանակ
+# Population - շրջանի բնակչություն
+# AveOccup   - տանը բնակվողների միջին քանակ
+# Latitude   - աշխարհագրական լայնություն
+# Longitude  - աշխարհագրական երկայնություն
+# MedHouseVal- տների միջին արժեք (թիրախ, հարյուր հազար $)
 
-train_size = int(len(indices) * 0.8)
-train_idx = indices[:train_size]
-test_idx = indices[train_size:]
+# ---------------------------------------------------------------------
+# 2. ՏՎՅԱԼՆԵՐԻ ՆԱԽԱՊԱՏՐԱՍՏՈՒՄ
+# ---------------------------------------------------------------------
+print("\nԲաց թողնված արժեքներ ըստ սյունակների:")
+print(df.isna().sum())
+df = df.dropna()
 
-X_train = [X[i] for i in train_idx]
-y_train = [y[i] for i in train_idx]
-X_test = [X[i] for i in test_idx]
-y_test = [y[i] for i in test_idx]
+print("\nՆկարագրական վիճակագրություն:")
+print(df.describe().round(2))
 
-# Տվյալների ստանդարտացում (Standardization)
-means = []
-stds = []
-for col in range(len(X_train[0])):
-  column_vals = [row[col] for row in X_train]
-  m = sum(column_vals) / len(column_vals)
-  s = math.sqrt(sum((v - m) ** 2 for v in column_vals) / len(column_vals))
-  means.append(m)
-  stds.append(s if s != 0 else 1)
+X = df.drop(columns="MedHouseVal")
+y = df["MedHouseVal"]
 
-
-def standardize(row):
-  return [(row[i] - means[i]) / stds[i] for i in range(len(row))]
-
-
-X_train_std = [standardize(r) for r in X_train]
-X_test_std = [standardize(r) for r in X_test]
-
-
-# Bias (ազատ անդամի՝ w0-ի համար 1-երի սյուն) ավելացում
-def add_bias(X):
-  return [[1] + row for row in X]
-
-
-X_train_b = add_bias(X_train_std)
-X_test_b = add_bias(X_test_std)
-
-
-# ==========================================
-# 2. ՄԱԹԵՄԱՏԻԿԱԿԱՆ ԵՎ ՄԱՏՐԻՑԱՅԻՆ ԳՈՐԾՈՂՈՒԹՅՈՒՆՆԵՐ
-# ==========================================
-def transpose(M):
-  return list(map(list, zip(*M)))
-
-
-def matmul(A, B):
-  result = []
-  for i in range(len(A)):
-    row = []
-    for j in range(len(B[0])):
-      s = sum(A[i][k] * B[k][j] for k in range(len(B)))
-      row.append(s)
-    result.append(row)
-  return result
-
-
-def inverse(M):
-  n = len(M)
-  aug = [M[i] + [1 if i == j else 0 for j in range(n)] for i in range(n)]
-  for i in range(n):
-    diag = aug[i][i]
-    if diag == 0:
-      for k in range(i + 1, n):
-        if aug[k][i] != 0:
-          aug[i], aug[k] = aug[k], aug[i]
-          diag = aug[i][i]
-          break
-    for j in range(2 * n):
-      aug[i][j] /= diag
-    for k in range(n):
-      if k != i:
-        factor = aug[k][i]
-        for j in range(2 * n):
-          aug[k][j] -= factor * aug[i][j]
-  return [row[n:] for row in aug]
-
-
-# ==========================================
-# 3. ԳԾԱՅԻՆ ՌԵԳՐԵՍԻԱՅԻ (OLS) ՈՒՍՈՒՑՈՒՄ
-# ==========================================
-def train_linear_regression(X, y):
-  X_T = transpose(X)
-  XTX = matmul(X_T, X)
-  XTy = matmul(X_T, [[v] for v in y])
-  XTX_inv = inverse(XTX)
-  W = matmul(XTX_inv, XTy)
-  return [w[0] for w in W]
-
-
-w = train_linear_regression(X_train_b, y_train)
-
-
-def predict_row(w, row):
-  return sum(w[i] * row[i] for i in range(len(w)))
-
-
-def predict(w, X):
-  return [predict_row(w, row) for row in X]
-
-
-y_pred = predict(w, X_test_b)
-
-
-# ==========================================
-# 4. ՄՈԴԵԼԻ ՈՐԱԿԻ ԳՆԱՀԱՏՈՒՄ
-# ==========================================
-def mae(y_true, y_pred):
-  return (
-      sum(abs(y_true[i] - y_pred[i]) for i in range(len(y_true)))
-      / len(y_true)
-  )
-
-
-def mse(y_true, y_pred):
-  return sum((y_true[i] - y_pred[i]) ** 2 for i in range(len(y_true))) / len(
-      y_true
-  )
-
-
-def rmse(y_true, y_pred):
-  return math.sqrt(mse(y_true, y_pred))
-
-
-def r2(y_true, y_pred):
-  mean_y = sum(y_true) / len(y_true)
-  ss_res = sum((y_true[i] - y_pred[i]) ** 2 for i in range(len(y_true)))
-  ss_tot = sum((v - mean_y) ** 2 for v in y_true)
-  return 1 - (ss_res / ss_tot)
-
-
-print(f'MAE:  {mae(y_test, y_pred):.2f}')
-print(f'MSE:  {mse(y_test, y_pred):.2f}')
-print(f'RMSE: {rmse(y_test, y_pred):.2f}')
-print(f'R²:   {r2(y_test, y_pred):.4f}')
-
-
-# ==========================================
-# 5. ՎԻԶՈՒԱԼԻԶԱՑԻԱ (ԳՐԱՖԻԿՆԵՐ)
-# ==========================================
-
-# 1. Իրական vs Կանխատեսված գներ
-plt.figure(figsize=(8, 6))
-plt.scatter(y_test, y_pred, alpha=0.3, color='blue')
-plt.plot(
-    [min(y_test), max(y_test)],
-    [min(y_test), max(y_test)],
-    color='red',
-    linewidth=2,
-    linestyle='--',
+# Բաժանում՝ 80% ուսուցում, 20% թեստավորում
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
 )
-plt.xlabel('Իրական գներ (Actual Values)')
-plt.ylabel('Կանխատեսված գներ (Predicted Values)')
-plt.title('Իրական և Կանխատեսված գների համեմատություն')
-plt.grid(True)
-plt.savefig('actual_vs_predicted.png')
-plt.show()
+print(f"\nTrain: {X_train.shape[0]} տող | Test: {X_test.shape[0]} տող")
 
-# 2. Սխալների (Residuals) բաշխման հիստոգրամ
-residuals = [y_test[i] - y_pred[i] for i in range(len(y_test))]
-plt.figure(figsize=(8, 6))
-sns.histplot(residuals, kde=True, color='purple', bins=50)
-plt.xlabel('Սխալի չափը (Residual = Actual - Predicted)')
-plt.ylabel('Հաճախականություն')
-plt.title('Մոդելի սխալների (Residuals) բաշխումը')
-plt.grid(True)
-plt.savefig('residuals_distribution.png')
-plt.show()
+# Ստանդարտացում (միայն train-ի միջինով և շեղումով, որպեսզի test-ից տվյալ չարտահոսի)
+mu = X_train.mean()
+sd = X_train.std()
+X_train_std = (X_train - mu) / sd
+X_test_std = (X_test - mu) / sd
 
-# 3. Կորելացիոն մատրից (Heatmap)
+# Կորելացիայի մատրից
 plt.figure(figsize=(10, 8))
-sns.heatmap(df.corr(), annot=True, fmt='.2f', cmap='coolwarm', linewidths=0.5)
-plt.title('Հատկանիշների կորելացիոն մատրից (Heatmap)')
+sns.heatmap(df.corr(), annot=True, fmt=".2f", cmap="coolwarm",
+            vmin=-1, vmax=1, linewidths=0.5)
+plt.title("Հատկանիշների կորելացիոն մատրից")
 plt.tight_layout()
-plt.savefig('correlation_heatmap.png')
+plt.savefig("correlation_heatmap.png", dpi=150)
 plt.show()
+
+# Bias (ազատ անդամ w0) - ավելացնում ենք 1-երի սյունակ
+Xtr = np.c_[np.ones(len(X_train_std)), X_train_std.to_numpy()]
+Xte = np.c_[np.ones(len(X_test_std)), X_test_std.to_numpy()]
+ytr = y_train.to_numpy()
+yte = y_test.to_numpy()
+
+# ---------------------------------------------------------------------
+# 3. ՄԵՔԵՆԱՅԱԿԱՆ ԻՐԱԿԱՆԱՑՈՒՄ
+# ---------------------------------------------------------------------
+def metrics(y_true, y_pred):
+    err = y_true - y_pred
+    mae = np.mean(np.abs(err))
+    mse = np.mean(err ** 2)
+    rmse = np.sqrt(mse)
+    r2 = 1 - np.sum(err ** 2) / np.sum((y_true - y_true.mean()) ** 2)
+    return mae, mse, rmse, r2
+
+
+# 3.1 Մեթոդ 1: Նորմալ հավասարում (Normal Equation, OLS)
+#     w = (X^T X)^(-1) X^T y
+w_ols = np.linalg.solve(Xtr.T @ Xtr, Xtr.T @ ytr)
+
+# 3.2 Մեթոդ 2: Գրադիենտային անկում (Gradient Descent)
+w_gd = np.zeros(Xtr.shape[1])
+lr = 0.1
+epochs = 3000
+N = len(Xtr)
+loss_history = []
+
+for epoch in range(epochs):
+    pred = Xtr @ w_gd
+    error = pred - ytr
+    grad = (Xtr.T @ error) / N
+    w_gd -= lr * grad
+    loss_history.append(np.mean(error ** 2))
+    if epoch % 500 == 0:
+        print(f"Epoch {epoch:4d} -> Train MSE: {loss_history[-1]:.4f}")
+
+# ---------------------------------------------------------------------
+# 4. ԳՆԱՀԱՏՈՒՄ
+# ---------------------------------------------------------------------
+results = []
+for name, w in [("Normal Equation (OLS)", w_ols), ("Gradient Descent", w_gd)]:
+    tr = metrics(ytr, Xtr @ w)
+    te = metrics(yte, Xte @ w)
+    results.append([name, *tr, *te])
+
+res_df = pd.DataFrame(
+    results,
+    columns=["Մոդել", "Train MAE", "Train MSE", "Train RMSE", "Train R2",
+             "Test MAE", "Test MSE", "Test RMSE", "Test R2"],
+)
+print("\n--- ԱՐԴՅՈՒՆՔՆԵՐԻ ՀԱՄԵՄԱՏՈՒԹՅՈՒՆ ---")
+print(res_df.round(4).to_string(index=False))
+
+# Ստուգում sklearn-ի հետ (պետք է համընկնի OLS-ի հետ)
+sk = LinearRegression().fit(X_train_std, y_train)
+sk_r2 = metrics(yte, sk.predict(X_test_std))[3]
+print(f"\nsklearn LinearRegression Test R2: {sk_r2:.4f} (ստուգման համար)")
+
+# Հիմնական մոդել՝ OLS
+w = w_ols
+y_pred = Xte @ w
+
+# ---------------------------------------------------------------------
+# 5. ԱՐԴՅՈՒՆՔՆԵՐԻ ՎԵՐԼՈՒԾՈՒԹՅՈՒՆ
+# ---------------------------------------------------------------------
+# 5.1 Իրական և կանխատեսված արժեքներ
+plt.figure(figsize=(8, 6))
+plt.scatter(yte, y_pred, alpha=0.3, color="blue", label="Կանխատեսումներ")
+lims = [min(yte.min(), y_pred.min()), max(yte.max(), y_pred.max())]
+plt.plot(lims, lims, "r--", linewidth=2, label="Իդեալական գիծ (y = x)")
+plt.xlabel("Իրական արժեքներ")
+plt.ylabel("Կանխատեսված արժեքներ")
+plt.title("Իրական և կանխատեսված գների համեմատություն")
+plt.legend()
+plt.grid(True)
+plt.savefig("actual_vs_predicted.png", dpi=150)
+plt.show()
+
+# 5.2 Սխալների (residuals) բաշխում
+residuals = yte - y_pred
+plt.figure(figsize=(8, 6))
+sns.histplot(residuals, kde=True, bins=50, color="purple")
+plt.xlabel("Սխալ (Իրական - Կանխատեսված)")
+plt.ylabel("Հաճախականություն")
+plt.title("Մոդելի սխալների բաշխումը")
+plt.grid(True)
+plt.savefig("residuals_distribution.png", dpi=150)
+plt.show()
+
+# 5.3 Ուսուցման կորուստի կոր (Gradient Descent)
+plt.figure(figsize=(8, 5))
+plt.plot(loss_history)
+plt.xlabel("Epoch")
+plt.ylabel("Train MSE")
+plt.title("Գրադիենտային անկման կորուստը")
+plt.grid(True)
+plt.savefig("loss_curve.png", dpi=150)
+plt.show()
+
+# 5.4 Հատկանիշների կարևորություն (ստանդարտացված գործակիցներ)
+importance = pd.Series(w[1:], index=X.columns)
+importance = importance.reindex(importance.abs().sort_values().index)
+
+plt.figure(figsize=(8, 5))
+colors = ["green" if v > 0 else "red" for v in importance.values]
+importance.plot(kind="barh", color=colors)
+plt.xlabel("Ստանդարտացված գործակից")
+plt.title("Հատկանիշների կարևորություն (կանաչ՝ գինը մեծացնում է, կարմիր՝ փոքրացնում)")
+plt.grid(True, axis="x")
+plt.tight_layout()
+plt.savefig("feature_importance.png", dpi=150)
+plt.show()
+
+print("\nՀատկանիշների կարևորություն (ըստ |գործակից|-ի՝ նվազման կարգով):")
+print(importance.reindex(importance.abs().sort_values(ascending=False).index).round(4))
+
+# ---------------------------------------------------------------------
+# 6. ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ
+# ---------------------------------------------------------------------
+mae_t, mse_t, rmse_t, r2_t = metrics(yte, y_pred)
+print("\n================ ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ ================")
+print(f"Test MAE : {mae_t:.4f}  (միջին բացարձակ սխալ, ~{mae_t * 100:.0f} հազար $)")
+print(f"Test RMSE: {rmse_t:.4f}")
+print(f"Test R2  : {r2_t:.4f}  (մոդելը բացատրում է գների տատանման ~{r2_t * 100:.0f}%-ը)")
+print("Գծային մոդելը չի գրավում գների և հատկանիշների ոչ գծային կապերը, ")
+print("իսկ dataset-ում գները կտրված են 5.0-ի վրա, ինչը սահմանափակում է ճշտությունը։")
