@@ -3,7 +3,8 @@ import random
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from sklearn.datasets import fetch_california_housing
+from sklearn.datasets 
+import fetch_california_housing
 
 # ==========================================
 # 1. ՏՎՅԱԼՆԵՐԻ ՀԱՎԱՔԱԾՈՒ ԵՎ ՆԱԽԱՊԱՏՐԱՍՏՈՒՄ
